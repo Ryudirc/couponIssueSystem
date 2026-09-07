@@ -1,3 +1,21 @@
 spring:
   application:
     name: coupon
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/coupon}
+    username: ${SPRING_DATASOURCE_USERNAME:coupon}
+    password: ${SPRING_DATASOURCE_PASSWORD:coupon}
+  jpa:
+    hibernate:
+      ddl-auto: update # 운영에서는 none
+    open-in-view: false
+    show-sql: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+  logging:
+    level:
+      com.travio.coupon: DEBUG
+      org.hibernate.SQL: DEBUG
+      org.hibernate.orm.jdbc.bind: TRACE # 바인딩 되는 파라미터를 보기위해 로그레벨을 TRACE로
