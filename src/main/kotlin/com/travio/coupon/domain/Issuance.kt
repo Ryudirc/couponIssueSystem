@@ -36,7 +36,7 @@ class Issuance(
     var couponId: Long,
 
     @Enumerated(EnumType.STRING) // 문자열로 들어가게 해야지.. 안그러면 Ordinal, 숫자로들어감
-    @Column(nullable = false,length = 16)
+    @Column(length = 16)
     var status: IssuanceStatus = IssuanceStatus.ISSUED,
 
     @Column(nullable = false,updatable = false)
@@ -53,4 +53,10 @@ class Issuance(
     var id: Long? = null,
 
 ) {
+
+    fun isExpired(now: LocalDateTime) : Boolean = now.isAfter(expiresAt)
+    fun markUsed(now: LocalDateTime) {
+        status = IssuanceStatus.USED
+        usedAt = now
+    }
 }

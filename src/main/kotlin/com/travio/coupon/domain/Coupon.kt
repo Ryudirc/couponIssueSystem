@@ -34,5 +34,9 @@ class Coupon(
     var id: Long? = null,
 
 ) {
+    fun isBookingOpen(now: LocalDateTime): Boolean =
+        startsAt?.let { !now.isBefore(it) } ?: true
+
+    fun isSoldOut(): Boolean = issuedQuantity >= totalQuantity
 
 }
