@@ -14,13 +14,15 @@ spring:
     hibernate:
       ddl-auto: update # 운영에서는 none
     open-in-view: false
-    show-sql: true
+    # 부하 테스트 시 stdout 동기 IO가 응답 > 레이턴시 생겨서 끔
+    show-sql: false
   mvc:
     problemdetails:
       enabled: true
 
   logging:
     level:
-      com.travio.coupon: DEBUG
-      org.hibernate.SQL: DEBUG
-      org.hibernate.orm.jdbc.bind: TRACE # 바인딩 되는 파라미터를 보기위해 로그레벨을 TRACE로
+      # 같은 이유로 부하 측정용 로그 레벨. 디버깅 시 DEBUG/TRACE로 일시 상향
+      com.travio.coupon: INFO
+      org.hibernate.SQL: WARN
+      org.hibernate.orm.jdbc.bind: WARN # 바인딩 되는 파라미터를 보기위해 로그레벨을 TRACE로
