@@ -36,8 +36,11 @@ class CouponService(
     @Transactional
     fun issue(couponId: Long, userId: Long) : Issuance {
 
-        val coupon = couponRepository.findById(couponId)
-            .orElseThrow{ CouponNotFoundException() }
+       /* val coupon = couponRepository.findById(couponId)
+            .orElseThrow{ CouponNotFoundException() }*/
+
+        // 비관적 Lock을 통해 coupon(nullable) 객체를 가져온다. 다만 엘비스연산자로 nullable을 벗겨낸다.
+        val coupon = couponRepository.findByIdForUpdate(couponId) ?: throw CouponNotFoundException()
 
         val now = LocalDateTime.now()
 
