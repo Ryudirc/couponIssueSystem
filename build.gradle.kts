@@ -1,9 +1,16 @@
+buildscript {
+    dependencies {
+        classpath("org.ow2.asm:asm:9.8")
+    }
+}
+
 plugins {
     kotlin("jvm") version "2.3.21"
     kotlin("plugin.spring") version "2.3.21"
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
     kotlin("plugin.jpa") version "2.3.21"
+    id("com.google.cloud.tools.jib") version "3.5.4"
 }
 
 group = "com.travio"
@@ -46,4 +53,30 @@ allOpen {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+}
+
+jib {
+    from { // 무엇을 가지고 image를 만들 것 인지
+        image = "eclipse-temurin:25-jre"
+        credHelper {
+            helper = "desktop"
+        }
+        platforms {
+            platform {
+                architecture = "amd64"
+                os = "linux"
+            }
+        }
+    }
+    to { // 산출 결과는 어떻게 세팅할것인지
+        image = "coupon-service"
+        credHelper {
+            helper = "desktop"
+        }
+        tags = setOf("latest",project.version.toString())
+    }
+    container { // 컨테이너 설정
+        ports = listOf("8080")
+        creationTime.set("USE_CURRENT_TIMESTAMP")
+    }
 }

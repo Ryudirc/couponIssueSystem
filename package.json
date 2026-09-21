@@ -1,0 +1,27 @@
+{
+  "name": "coupon",
+  "version": "1.0.0",
+  "description": "Coupon Issue system By Kotlin With Spring Boot",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ryudirc/couponIssueSystem.git"
+  },
+  "private": true,
+  "dependencies": {
+    "k6": "^0.0.0"
+  },
+  "devDependencies": {
+    "@types/k6": "^2.2.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Ryudirc/couponIssueSystem/issues"
+  },
+  "homepage": "https://github.com/Ryudirc/couponIssueSystem#readme"
+}

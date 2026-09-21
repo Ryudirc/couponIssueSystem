@@ -16,5 +16,17 @@ services:
       timeout: 3s
       retries: 20
 
+  coupon-service:
+    image: coupon-service:latest
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/coupon?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: coupon
+      SPRING_DATASOURCE_PASSWORD: coupon
+    ports:
+      - "8080:8080"
+
 volumes:
   mysql-data:
