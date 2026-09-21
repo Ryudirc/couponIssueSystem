@@ -19,28 +19,31 @@ import java.time.LocalDateTime
 class CouponService(
     private val couponRepository: CouponRepository,
     private val issuanceRepository: IssuanceRepository,
+    private val couponIssuer: CouponIssuer
 ) {
 
     @Transactional // 하나의 Write 연산만 있긴하지만 관례적으로 씀.
     fun createCoupon(request: CreateCouponRequest): Coupon {
 
-        val coupon = Coupon(
-            name = request.name,
-            totalQuantity = request.totalQuantity,
-            validityDays = request.validityDays,
-            startsAt = request.startsAt,
+        val coupon = couponRepository.save(
+            Coupon(
+                name = request.name,
+                totalQuantity = request.totalQuantity,
+                validityDays = request.validityDays,
+                startsAt = request.startsAt,
+            )
         )
-        return couponRepository.save(coupon)
+
+        couponIssuer.initStock(coupon.id!!, coupon.totalQuantity)
+
+        return coupon
     }
 
     @Transactional
     fun issue(couponId: Long, userId: Long) : Issuance {
 
-       /* val coupon = couponRepository.findById(couponId)
-            .orElseThrow{ CouponNotFoundException() }*/
-
-        // 비관적 Lock을 통해 coupon(nullable) 객체를 가져온다. 다만 엘비스연산자로 nullable을 벗겨낸다.
-        val coupon = couponRepository.findByIdForUpdate(couponId) ?: throw CouponNotFoundException()
+       val coupon = couponRepository.findById(couponId)
+            .orElseThrow{ CouponNotFoundException() }
 
         val now = LocalDateTime.now()
 
@@ -56,7 +59,12 @@ class CouponService(
             throw AlreadyIssuedException()
         }
 
-        coupon.issuedQuantity++
+        //redis Lua 원자 연산 추가(통과된 것들만 update)
+        couponIssuer.tryIssue(couponId)
+
+        //coupon.issuedQuantity++
+        // 메모리에 있던 issuedQuantity를 쓰면 두개의 스레드가 동시에 접근해서 메모리에 가진 값으로 update를 해버리기 때문에 갱신손실이 나타날 수 있어 DB에 있는 값을 기준으로 +1 하는 UPDATE
+        couponRepository.incrementIssuedQuantity(couponId)
 
         return issuanceRepository.save(
             Issuance(
