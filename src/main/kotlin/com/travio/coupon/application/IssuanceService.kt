@@ -1,7 +1,7 @@
 package com.travio.coupon.application
 
 import com.travio.coupon.domain.Issuance
-import com.travio.coupon.domain.IssuanceRepository
+import com.travio.coupon.persistence.IssuanceRepository
 import com.travio.coupon.domain.IssuanceStatus
 import com.travio.coupon.support.AlreadyUsedException
 import com.travio.coupon.support.ExpiredException
@@ -36,6 +36,11 @@ class IssuanceService(
         issuance.markUsed(now)
         return issuance
 
+    }
+
+    @Transactional
+    fun findByUser(userId: Long) : List<Issuance> {
+        return issuanceRepository.findByUserIdOrderByIssuedAtDesc(userId)
     }
 
 }

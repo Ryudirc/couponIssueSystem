@@ -1,5 +1,6 @@
-package com.travio.coupon.domain
+package com.travio.coupon.persistence
 
+import com.travio.coupon.domain.Issuance
 import org.springframework.data.jpa.repository.JpaRepository
 
 interface IssuanceRepository : JpaRepository<Issuance, Long> {

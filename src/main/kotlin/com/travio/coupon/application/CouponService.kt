@@ -1,16 +1,13 @@
 package com.travio.coupon.application
 
 import com.travio.coupon.api.dto.CreateCouponRequest
-import com.travio.coupon.api.dto.IssuanceResponse
 import com.travio.coupon.domain.Coupon
-import com.travio.coupon.domain.CouponRepository
+import com.travio.coupon.persistence.CouponRepository
 import com.travio.coupon.domain.Issuance
-import com.travio.coupon.domain.IssuanceRepository
-import com.travio.coupon.domain.IssuanceStatus
-import com.travio.coupon.support.AlreadyIssuedException
+import com.travio.coupon.infrastructure.messaging.InMemoryIssuanceQueue
+import com.travio.coupon.infrastructure.messaging.IssuanceRequested
 import com.travio.coupon.support.CouponNotFoundException
 import com.travio.coupon.support.NotStartedException
-import com.travio.coupon.support.SoldOutException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -18,13 +15,14 @@ import java.time.LocalDateTime
 @Service
 class CouponService(
     private val couponRepository: CouponRepository,
-    private val issuanceRepository: IssuanceRepository,
-    private val couponIssuer: CouponIssuer
+    private val couponIssuer: CouponIssuer,
+    private val issuanceQueue: InMemoryIssuanceQueue,
 ) {
 
     @Transactional // 하나의 Write 연산만 있긴하지만 관례적으로 씀.
     fun createCoupon(request: CreateCouponRequest): Coupon {
 
+        // 발매되는 쿠폰은 DB에 row 한줄임. 수량만 5천개로 지정.
         val coupon = couponRepository.save(
             Coupon(
                 name = request.name,
@@ -34,6 +32,8 @@ class CouponService(
             )
         )
 
+        // Issuer가 왜 등장하게 되었는가?
+        // redis 에서 쿠폰수량을 선차감 하기 위해, Issuer가 redis에 수량을 미리 init(redis에 set) 해둔다.
         couponIssuer.initStock(coupon.id!!, coupon.totalQuantity)
 
         return coupon
@@ -51,33 +51,25 @@ class CouponService(
             throw NotStartedException()
         }
 
-        if(coupon.isSoldOut()) {
-            throw SoldOutException()
-        }
-
-        if(issuanceRepository.existsByUserIdAndCouponId(userId, couponId)) {
-            throw AlreadyIssuedException()
-        }
-
         //redis Lua 원자 연산 추가(통과된 것들만 update)
-        couponIssuer.tryIssue(couponId)
+        couponIssuer.tryIssue(couponId,userId)
 
-        //coupon.issuedQuantity++
-        // 메모리에 있던 issuedQuantity를 쓰면 두개의 스레드가 동시에 접근해서 메모리에 가진 값으로 update를 해버리기 때문에 갱신손실이 나타날 수 있어 DB에 있는 값을 기준으로 +1 하는 UPDATE
-        couponRepository.incrementIssuedQuantity(couponId)
+        val expiresAt = now.plusDays(coupon.validityDays.toLong())
 
-        return issuanceRepository.save(
-            Issuance(
-                userId = userId,
+        issuanceQueue.enqueue(
+            IssuanceRequested(
                 couponId = couponId,
+                userId = userId,
                 issuedAt = now,
-                expiresAt = now.plusDays(coupon.validityDays.toLong()),
+                expiresAt = expiresAt,
             )
         )
+
+        return Issuance(
+            userId = userId,
+            couponId = couponId,
+            issuedAt = now,
+            expiresAt = expiresAt,
+        )
     }
-
-    fun fundByUser(userId: Long) : List<Issuance> =
-        issuanceRepository.findByUserIdOrderByIssuedAtDesc(userId)
-
-
 }
