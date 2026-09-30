@@ -1,5 +1,6 @@
-package com.travio.coupon.domain
+package com.travio.coupon.persistence
 
+import com.travio.coupon.domain.Coupon
 import jakarta.persistence.LockModeType
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Lock
@@ -16,5 +17,9 @@ interface CouponRepository : JpaRepository<Coupon, Long> {
     @Modifying
     @Query("update Coupon c set c.issuedQuantity = c.issuedQuantity + 1 where c.id = :id")
     fun incrementIssuedQuantity(@Param("id") id: Long) :Int
+
+    @Query("select c from Coupon c where c.id = :id")
+    fun findByUser(userId: Long) : List<Coupon>
+
 
 }

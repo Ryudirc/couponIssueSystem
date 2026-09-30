@@ -9,7 +9,6 @@ spring:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
-
   jpa:
     hibernate:
       ddl-auto: update # 운영에서는 none
@@ -20,9 +19,9 @@ spring:
     problemdetails:
       enabled: true
 
-  logging:
-    level:
-      # 같은 이유로 부하 측정용 로그 레벨. 디버깅 시 DEBUG/TRACE로 일시 상향
-      com.travio.coupon: INFO
-      org.hibernate.SQL: WARN
-      org.hibernate.orm.jdbc.bind: WARN # 바인딩 되는 파라미터를 보기위해 로그레벨을 TRACE로
+logging:
+  level:
+    # 같은 이유로 부하 측정용 로그 레벨. 디버깅 시 DEBUG/TRACE로 일시 상향
+    com.travio.coupon: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN # 바인딩 되는 파라미터를 보기위해 로그레벨을 TRACE로
