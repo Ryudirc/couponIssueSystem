@@ -4,10 +4,10 @@ import com.travio.coupon.api.dto.CreateCouponRequest
 import com.travio.coupon.domain.Coupon
 import com.travio.coupon.persistence.CouponRepository
 import com.travio.coupon.domain.Issuance
-import com.travio.coupon.infrastructure.messaging.InMemoryIssuanceQueue
 import com.travio.coupon.infrastructure.messaging.IssuanceRequested
 import com.travio.coupon.support.CouponNotFoundException
 import com.travio.coupon.support.NotStartedException
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -16,7 +16,7 @@ import java.time.LocalDateTime
 class CouponService(
     private val couponRepository: CouponRepository,
     private val couponIssuer: CouponIssuer,
-    private val issuanceQueue: InMemoryIssuanceQueue,
+    private val eventPublisher: ApplicationEventPublisher
 ) {
 
     @Transactional // 하나의 Write 연산만 있긴하지만 관례적으로 씀.
@@ -56,7 +56,7 @@ class CouponService(
 
         val expiresAt = now.plusDays(coupon.validityDays.toLong())
 
-        issuanceQueue.enqueue(
+        eventPublisher.publishEvent(
             IssuanceRequested(
                 couponId = couponId,
                 userId = userId,
