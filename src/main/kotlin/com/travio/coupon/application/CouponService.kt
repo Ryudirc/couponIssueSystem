@@ -7,7 +7,6 @@ import com.travio.coupon.domain.Issuance
 import com.travio.coupon.infrastructure.cache.CacheProperties
 import com.travio.coupon.infrastructure.messaging.IssuanceRequestProducer
 import com.travio.coupon.infrastructure.messaging.IssuanceRequested
-import com.travio.coupon.support.CouponNotFoundException
 import com.travio.coupon.support.NotStartedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -16,8 +15,7 @@ import java.time.LocalDateTime
 @Service
 class CouponService(
     private val couponRepository: CouponRepository,
-    private val cacheProperties: CacheProperties,
-    private val cacheMetrics: CacheMetrics,
+    private val couponPolicyReader: CouponIssuePolicyReader,
     private val couponIssuer: CouponIssuer,
     private val issuanceRequestProducer: IssuanceRequestProducer,
 ) {
@@ -48,25 +46,19 @@ class CouponService(
      */
     @Transactional
     fun issue(couponId: Long, userId: Long) : Issuance {
-        cacheMetrics.incrementCouponDbRead() // 쿠폰 발급 전에 matrix에 기록
 
-        // DB에서 조회하고 응답하는 속도를 임의로 늦추기 위해 sleep을 걸어두었음.
-        // 외부 네트워크 혹은 외부 리전에 있는 DB서버면 이게 필요없는데, 로컬 DB이다 보니 생각보다 속도가 빨라서 일부로 레이턴시를 줌.
-        Thread.sleep(cacheProperties.simulatedLoadLatencyMs)
-
-        val coupon = couponRepository.findById(couponId)
-            .orElseThrow{ CouponNotFoundException() }
+        val policy = couponPolicyReader.get(couponId)
 
         val now = LocalDateTime.now()
 
-        if(!coupon.isBookingOpen(now)) {
+        if(!policy.isBookingOpen(now)) {
             throw NotStartedException()
         }
 
         //redis Lua 원자 연산 추가(통과된 것들만 update)
         couponIssuer.tryIssue(couponId,userId)
 
-        val expiresAt = now.plusDays(coupon.validityDays.toLong())
+        val expiresAt = now.plusDays(policy.validityDays.toLong())
 
         issuanceRequestProducer.publish(
             IssuanceRequested(
