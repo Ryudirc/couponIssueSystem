@@ -28,7 +28,6 @@ coupon:
     fresh-ms: ${COUPON_CACHE_FRESH_MS:500} # SWR fresh window(캐시를 최신으로 보는 시간, ttl-ms 보다 짧게)
     simulated-load-latency-ms: ${COUPON_CACHE_SIMULATED_LOAD_LATENCY_MS:0}
 
-
 logging:
   level:
     # 같은 이유로 부하 측정용 로그 레벨. 디버깅 시 DEBUG/TRACE로 일시 상향

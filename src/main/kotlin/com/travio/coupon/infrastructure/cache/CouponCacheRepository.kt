@@ -23,6 +23,7 @@ class CouponCacheRepository(
     private val cacheProperties: CacheProperties,
     private val cacheMetrics: CacheMetrics,
 ) {
+    // 현재 코드에서 만약 coupon을 여러개 생성한다고 하면 서버 성능에 따라 ThreadPool 의 thread 수를 늘릴 수 있음.
     private val backgroundExecutor = Executors.newFixedThreadPool(4) { runnable ->
         Thread(runnable, "coupon-cache-swr-refresh").apply{ isDaemon = true }
     }
@@ -57,7 +58,6 @@ class CouponCacheRepository(
                     cacheMetrics.incrementCouponCacheHit()
                     return mapper.readValue(result[1], CouponIssuePolicy::class.java)
                 }
-
                 "STALE_REFRESH" ->{
                     cacheMetrics.incrementCouponCacheHit()
                     backgroundExecutor.execute {
@@ -85,7 +85,6 @@ class CouponCacheRepository(
          try { // LOAD를 result로 받았다는건 해당 스레드가 대표가되어 DB에 가서 데이터를 가져오는 스레드라는 것.
             cacheMetrics.incrementCouponDbRead()
             val response = loader()
-            val json = mapper.writeValueAsString(response)
             redis.opsForHash<String,String>().putAll(
                 cacheKey,
                 mapOf(

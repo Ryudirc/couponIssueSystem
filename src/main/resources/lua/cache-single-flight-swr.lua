@@ -11,7 +11,6 @@ if not value then
     local acquired = redis.call('SET',KEYS[2],ARGV[3],'NX','PX', ARGV[4])
     if acquired then return {'LOAD', ''} end
     return {'WAIT',''}
-
 end
 
 local now = tonumber(ARGV[1])
