@@ -69,7 +69,7 @@ class CouponCacheRepository(
                     }
                     return mapper.readValue(result[1], CouponIssuePolicy::class.java)
                 }
-                "LOAD" -> return fillCache(cacheKey, cacheKey, lockKey, loader)
+                "LOAD" -> return fillCache(cacheKey, lockKey, lockKey, loader)
                 "WAIT" -> Thread.sleep(WAIT_BACKOFF_MS) // 나머지 스레드는 모두 BACKOFF 시간동안 sleep 하고 repeat 구문에 의해 최대 50번 반복실행됨.
             }
         }
