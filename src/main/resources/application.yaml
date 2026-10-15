@@ -27,7 +27,11 @@ coupon:
     ttl-ms: ${COUPON_CACHE_TTL_MS:10000}
     fresh-ms: ${COUPON_CACHE_FRESH_MS:500} # SWR fresh window(캐시를 최신으로 보는 시간, ttl-ms 보다 짧게)
     simulated-load-latency-ms: ${COUPON_CACHE_SIMULATED_LOAD_LATENCY_MS:0}
-
+  sold-out:
+    #매진 플래그 Redis TTL (이벤트 종료까지 유지). 여기서는 하루동안 하는 이벤트라고 가정하고 86400 이라는 수치를 넣음.
+    ttl-seconds: ${COUPON_SOLD_OUT_TTL_SECONDS:86400}
+    # Application fast-path (caffeine) TTL. 매진 직후 이 시간만큼 실제 매진을 아직 모를 수 있음.
+    fast-path-ttl-ms: ${COUPON_SOLD_OUT_FAST_PATH_TTL_MS:1000}
 logging:
   level:
     # 같은 이유로 부하 측정용 로그 레벨. 디버깅 시 DEBUG/TRACE로 일시 상향

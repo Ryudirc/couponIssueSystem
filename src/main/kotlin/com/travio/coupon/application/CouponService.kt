@@ -8,6 +8,7 @@ import com.travio.coupon.infrastructure.cache.CacheProperties
 import com.travio.coupon.infrastructure.messaging.IssuanceRequestProducer
 import com.travio.coupon.infrastructure.messaging.IssuanceRequested
 import com.travio.coupon.support.NotStartedException
+import com.travio.coupon.support.SoldOutException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.LocalDateTime
@@ -18,6 +19,8 @@ class CouponService(
     private val couponPolicyReader: CouponIssuePolicyReader,
     private val couponIssuer: CouponIssuer,
     private val issuanceRequestProducer: IssuanceRequestProducer,
+    // 매진된 상태를 관리하는 class (매진 처리 관리)
+    private val soldOutState: SoldOutState,
 ) {
     /**
      * 쿠폰을 발행(create)하는 로직
@@ -47,8 +50,13 @@ class CouponService(
     @Transactional
     fun issue(couponId: Long, userId: Long) : Issuance {
 
-        val policy = couponPolicyReader.get(couponId)
+        // 매진이면 아무것도 하지않음.
+        if(soldOutState.isSoldOut(couponId)) {
+            throw SoldOutException()
+        }
 
+
+        val policy = couponPolicyReader.get(couponId)
         val now = LocalDateTime.now()
 
         if(!policy.isBookingOpen(now)) {

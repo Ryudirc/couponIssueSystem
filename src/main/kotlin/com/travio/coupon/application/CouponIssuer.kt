@@ -1,5 +1,6 @@
 package com.travio.coupon.application
 
+import com.travio.coupon.infrastructure.cache.IssuanceRedisRepository
 import com.travio.coupon.support.AlreadyIssuedException
 import com.travio.coupon.support.SoldOutException
 import org.springframework.core.io.ClassPathResource
@@ -9,34 +10,27 @@ import org.springframework.stereotype.Component
 
 @Component
 class CouponIssuer(
-    private val redisTemplate: StringRedisTemplate
+    private val issuanceRedisRepository: IssuanceRedisRepository
 ) {
 
-    private val script: RedisScript<Long> = RedisScript.of(
-        ClassPathResource("lua/issue.lua"),
-        Long::class.java
-    )
+
 
     fun tryIssue(couponId: Long, userId: Long) {
-        val raw = redisTemplate.execute(script,
-            listOf(stockKey(couponId), usersKey(userId)),
-            userId.toString()
-        ) ?: error("Lua 스크립트 결과가 null")
 
-        when(raw) {
+        when(issuanceRedisRepository.tryIssue(couponId,userId)) {
             1L -> Unit
             0L -> throw SoldOutException()
             -1L -> throw AlreadyIssuedException()
-            else -> error("예상치 못한 Lua 결과: $raw")
+            else -> error("예상치 못한 Lua 결과")
         }
 
     }
 
     fun initStock(couponId: Long, totalQuantity: Int) {
-        // Key: coupon:$couponId:stock || Value: 쿠폰수량(totalQuantity)
-        redisTemplate.opsForValue().set(stockKey(couponId), totalQuantity.toString())
+        issuanceRedisRepository.initStock(couponId,totalQuantity)
     }
 
-    private fun stockKey(couponId: Long) = "coupon:$couponId:stock"
-    private fun usersKey(userId: Long): String = "coupon:$userId:users"
+
+
+
 }
