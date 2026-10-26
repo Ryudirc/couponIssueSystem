@@ -11,9 +11,10 @@ spring:
       port: ${SPRING_DATA_REDIS_PORT:6379}
   jpa:
     hibernate:
-      ddl-auto: update # 운영에서는 none
+      ddl-auto: update
     open-in-view: false
-    # 부하 테스트 시 stdout 동기 IO가 응답 > 레이턴시 생겨서 끔
+    # 부하 테스트 시 stdout 동기 IO 가 응답 latency 에 박히므로 끔.
+    # 로컬 디버깅이 필요하면 일시적으로 true 로 바꿔서 확인.
     show-sql: false
   mvc:
     problemdetails:
@@ -21,20 +22,28 @@ spring:
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
 
-
 coupon:
   cache:
+    # 쿠폰 캐시 TTL. stampede 측정 시 1000 (1초) 으로 오버라이드.
     ttl-ms: ${COUPON_CACHE_TTL_MS:10000}
-    fresh-ms: ${COUPON_CACHE_FRESH_MS:500} # SWR fresh window(캐시를 최신으로 보는 시간, ttl-ms 보다 짧게)
+    # SWR fresh window (캐시를 최신으로 보는 시간, ttl-ms 보다 짧게). 이 안: 즉시 반환, 넘으면 stale + 백그라운드 갱신.
+    fresh-ms: ${COUPON_CACHE_FRESH_MS:500}
+    # loader latency (DB 조회 지연시간) 시뮬레이션. loader 안에서 Thread.sleep. 0=비활성.
     simulated-load-latency-ms: ${COUPON_CACHE_SIMULATED_LOAD_LATENCY_MS:0}
   sold-out:
-    #매진 플래그 Redis TTL (이벤트 종료까지 유지). 여기서는 하루동안 하는 이벤트라고 가정하고 86400 이라는 수치를 넣음.
+    # 매진 플래그 Redis TTL.
     ttl-seconds: ${COUPON_SOLD_OUT_TTL_SECONDS:86400}
-    # Application fast-path (caffeine) TTL. 매진 직후 이 시간만큼 실제 매진을 아직 모를 수 있음.
+    # Application fast-path (Caffeine) TTL. 매진 직후 이 시간만큼 실제 매진을 아직 모를 수 있음.
     fast-path-ttl-ms: ${COUPON_SOLD_OUT_FAST_PATH_TTL_MS:1000}
+  reconcile:
+    # 정합성 점검 배치 주기. 매 분 1회. 발급 시각 window 한 칸의 너비이기도 하다.
+    interval-ms: ${COUPON_RECONCILE_INTERVAL_MS:60000}
+    # 발급 시각 window 상한 여유분. 방금 발급돼 DB 가 아직 안 따라온 쿠폰은 cutoff(now - grace) 이후라 제외된다.
+    grace-period-ms: ${COUPON_RECONCILE_GRACE_PERIOD_MS:10000}
+
 logging:
   level:
-    # 같은 이유로 부하 측정용 로그 레벨. 디버깅 시 DEBUG/TRACE로 일시 상향
-    com.travio.coupon: INFO
+    # 같은 이유로 부하 측정용 로그 레벨. 디버깅 시 DEBUG/TRACE 로 일시 상향.
+    com.apiece.coupon: INFO
     org.hibernate.SQL: WARN
-    org.hibernate.orm.jdbc.bind: WARN # 바인딩 되는 파라미터를 보기위해 로그레벨을 TRACE로
+    org.hibernate.orm.jdbc.bind: WARN

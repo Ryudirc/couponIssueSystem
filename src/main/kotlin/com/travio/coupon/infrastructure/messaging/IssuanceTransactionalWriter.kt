@@ -15,6 +15,9 @@ class IssuanceTransactionalWriter(
 
     @Transactional
     fun insertAndIncrement(event: IssuanceRequested) {
+        // DLT 토픽 message 를 replay 할때 이미 DB에 있는지 검사 하고 넣기 -> 정합성 검증을 위해 한번 더 check
+        if(isAlreadyApplied(event)) return
+
         issuanceRepository.save(
             Issuance(
                 couponId = event.couponId,
@@ -25,4 +28,9 @@ class IssuanceTransactionalWriter(
         )
         couponRepository.incrementIssuedQuantity(event.couponId)
     }
+
+
+    fun isAlreadyApplied(event: IssuanceRequested) : Boolean =
+        issuanceRepository.existsByUserIdAndCouponId(event.userId,event.couponId)
+
 }
