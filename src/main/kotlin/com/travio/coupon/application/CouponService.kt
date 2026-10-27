@@ -4,9 +4,9 @@ import com.travio.coupon.api.dto.CreateCouponRequest
 import com.travio.coupon.domain.Coupon
 import com.travio.coupon.persistence.CouponRepository
 import com.travio.coupon.domain.Issuance
+import com.travio.coupon.infrastructure.cache.CacheProperties
 import com.travio.coupon.infrastructure.messaging.IssuanceRequestProducer
 import com.travio.coupon.infrastructure.messaging.IssuanceRequested
-import com.travio.coupon.support.CouponNotFoundException
 import com.travio.coupon.support.NotStartedException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -15,14 +15,17 @@ import java.time.LocalDateTime
 @Service
 class CouponService(
     private val couponRepository: CouponRepository,
+    private val couponPolicyReader: CouponIssuePolicyReader,
     private val couponIssuer: CouponIssuer,
     private val issuanceRequestProducer: IssuanceRequestProducer,
 ) {
-
+    /**
+     * 쿠폰을 발행(create)하는 로직
+     */
     @Transactional // 하나의 Write 연산만 있긴하지만 관례적으로 씀.
     fun createCoupon(request: CreateCouponRequest): Coupon {
 
-        // 발매되는 쿠폰은 DB에 row 한줄임. 수량만 5천개로 지정.
+        // 발매되는 쿠폰은 DB에 row 한줄임. (쿠폰의 내용이 동일하기 때문, 차감은 수량으로 하기때문에 상관없음.)
         val coupon = couponRepository.save(
             Coupon(
                 name = request.name,
@@ -32,29 +35,30 @@ class CouponService(
             )
         )
 
-        // Issuer가 왜 등장하게 되었는가?
         // redis 에서 쿠폰수량을 선차감 하기 위해, Issuer가 redis에 수량을 미리 init(redis에 set) 해둔다.
         couponIssuer.initStock(coupon.id!!, coupon.totalQuantity)
 
         return coupon
     }
 
+    /**
+     * 발행된 쿠폰을 발급(issue)하는 로직
+     */
     @Transactional
     fun issue(couponId: Long, userId: Long) : Issuance {
 
-       val coupon = couponRepository.findById(couponId)
-            .orElseThrow{ CouponNotFoundException() }
+        val policy = couponPolicyReader.get(couponId)
 
         val now = LocalDateTime.now()
 
-        if(!coupon.isBookingOpen(now)) {
+        if(!policy.isBookingOpen(now)) {
             throw NotStartedException()
         }
 
         //redis Lua 원자 연산 추가(통과된 것들만 update)
         couponIssuer.tryIssue(couponId,userId)
 
-        val expiresAt = now.plusDays(coupon.validityDays.toLong())
+        val expiresAt = now.plusDays(policy.validityDays.toLong())
 
         issuanceRequestProducer.publish(
             IssuanceRequested(
