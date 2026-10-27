@@ -22,6 +22,7 @@ class IssuanceWriter(
             // IssuanceWriter까지 전파되더라도, 내부 insertAndIncrement에서 발생한 트랜잭션은 롤백될것이고, 바깥쪽 catch에서 잡고 끝낼 수 있으니 안전한 코드라고 볼 수 있겠음.
             issuanceTransactionalWriter.insertAndIncrement(event)
         }catch (e: DataIntegrityViolationException) {
+            if(!issuanceTransactionalWriter.isAlreadyApplied(event)) throw e
             log.debug {  "UNIQUE 위반은 멱등 처리: couponId=${event.couponId}, userId=${event.userId}"}
         }
     }

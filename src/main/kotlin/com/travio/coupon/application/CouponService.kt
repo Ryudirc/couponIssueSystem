@@ -55,7 +55,6 @@ class CouponService(
             throw SoldOutException()
         }
 
-
         val policy = couponPolicyReader.get(couponId)
         val now = LocalDateTime.now()
 
