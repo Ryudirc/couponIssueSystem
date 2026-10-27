@@ -16,7 +16,7 @@ class IssuanceRedisRepository(
             issueScript,
             listOf(
                 "coupon:$couponId:stock",
-                "coupon:$userId:users",
+                "coupon:$couponId:users",
                 "coupon:$couponId:sold_out",
                 "coupon:reconcile:recent",
             ),
@@ -28,5 +28,4 @@ class IssuanceRedisRepository(
     fun initStock(couponId: Long, totalQuantity: Int) {
         redis.opsForValue().set("coupon:$couponId:stock", totalQuantity.toString())
     }
-
 }

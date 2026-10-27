@@ -40,6 +40,8 @@ class CouponReconciler(
         // 자동 보정 가능 Case
         var autoFixed = reconcileSoldOut(couponId,stock)
         val userDrift = coupon.totalQuantity - (reconcileRedisRepository.userCount(couponId) + stock)
+        // 쿠폰 총 수량에서 해당쿠폰을 발급받은 유저수와 재고 수를 더한값을 뺐을 때 0보다 크다면 -> 어느 과정에서 누락이 생긴건가?
+        // 총 수량이 100개고, 재고가 30개, 유저카운트가 50개면, 분명 발급은 70개가 되었는데 20개가 비어버린다는 뜻이겠구나..
         var driftAlert = false
         if(userDrift > 0) {
             val redisUserIds = reconcileRedisRepository.userIds(couponId).mapNotNull { it.toLongOrNull() }
@@ -83,7 +85,7 @@ class CouponReconciler(
                 log.info { "auto-fix: 매진 플래그 설정 | coupon=$couponId" }
                 1 // 성공처리인 1 리턴
             }
-            else -> 0 // 아니면 0
+            else -> 0 // 아니면 0 -> soldOut 관련해서는 정상이므로 고친게 없어서 0
         }
 
     }

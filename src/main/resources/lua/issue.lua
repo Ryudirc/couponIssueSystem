@@ -11,8 +11,8 @@ if remaining <= 0 then
     return 0
 end
 
-redis.call('DECR', KEYS[1])
-redis.call('SADD', KEYS[2], ARGV[1])
+redis.call('DECR', KEYS[1]) -- 재고차감
+redis.call('SADD', KEYS[2], ARGV[1]) -- 중복발급 방지 위한 회원추가
 -- 대사 sliding window 인덱스: 쿠폰별 최신 발급 시각을 score 로 (member 는 couponId, ZADD 가 갱신).
 redis.call('ZADD', KEYS[4], ARGV[3], ARGV[4])
 
