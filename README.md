@@ -1,8 +1,8 @@
-# Coupon Issue System · Single-Flight
+# Coupon Issue System
 
-**캐시가 비는 순간 몰리는 DB 조회를 대표 요청으로 모으는 단계입니다.** Redis Lua 선차감·Kafka 비동기 저장은 유지하고, 발급 시작 시각·유효 일수 등 쿠폰 정책의 반복 조회를 줄입니다.
+**Redis Lua와 Kafka로 선착순 쿠폰 발급을 처리하는 Kotlin/Spring 학습 프로젝트입니다.** 이 브랜치는 캐시 최적화 전 기준 구현이며, 이후 브랜치에서 DB 조회 집중과 매진 이후의 반복 요청을 줄이는 과정을 이어갑니다.
 
-> 현재 단계: `feature/cache_singleFlight` · 코드 기준: [970f77b](https://github.com/Ryudirc/couponIssueSystem/commit/970f77b). 강의 기반 학습 프로젝트의 브랜치별 구현 기록입니다.
+> 현재 단계: `main` · 코드 기준: [d2f7569](https://github.com/Ryudirc/couponIssueSystem/commit/d2f7569). 강의 기반 학습 코드이며, 여기서는 현재 저장소에서 확인되는 구현과 한계만 설명합니다.
 
 ## 브랜치별 발전 과정
 
@@ -15,49 +15,36 @@
 
 각 브랜치는 앞 단계의 구현을 이어받습니다. **발급 재고**, **쿠폰 발급 정책 캐시**, **매진 여부 캐시**는 서로 다른 데이터입니다. 정책 캐시가 오래됐더라도 실제 재고 확인·차감은 Redis Lua에서 수행합니다.
 
-## 문제와 선택
-
-캐시가 만료되면 같은 쿠폰을 요청한 여러 스레드가 동시에 DB로 향할 수 있습니다. 이를 **캐시 스탬피드**라고 합니다. 여기서는 Redis 락을 얻은 요청 하나가 정책을 읽어 캐시를 채우고, 나머지는 결과를 기다리도록 했습니다.
+## 핵심 처리 흐름
 
 ```mermaid
-flowchart TD
-    A[발급 정책 조회] --> B[Redis Lua: 캐시와 락 확인]
-    B -->|HIT| C[캐시 반환]
-    B -->|LOAD: 락 획득| D[DB 정책 조회]
-    D --> E[Redis 캐시 저장]
-    E --> F[내 토큰의 락 해제]
-    B -->|WAIT| G[20ms 대기 후 재확인]
-    G --> B
-    C --> H[시작 시각 확인 → 재고 Lua → Kafka → Worker DB 저장]
-    F --> H
+flowchart LR
+    A[발급 요청] --> B[DB에서 쿠폰 조회]
+    B --> C[발급 시작 시각 확인]
+    C --> D[Redis Lua: 중복 확인과 재고 차감]
+    D --> E[Kafka 발급 요청 전송]
+    E --> F[HTTP 응답: DB 저장 완료를 기다리지 않음]
+    E --> G[Worker]
+    G --> H[MySQL: 발급 내역 저장 + 발급 수 증가]
 ```
 
-- **HIT:** 저장된 정책을 바로 사용합니다.
-- **LOAD:** UUID 토큰으로 락을 획득한 요청이 DB를 조회하고 캐시를 저장합니다.
-- **WAIT:** 다른 요청이 채우는 동안 20ms씩 최대 50회 반복합니다. 소진하면 예외를 던집니다.
-- 락은 3초 후 만료됩니다. 해제 시 토큰을 비교해 다른 요청의 락을 지우지 않습니다.
+1. 쿠폰 생성 시 MySQL에 쿠폰 한 건을 저장하고 Redis에 초기 재고를 설정합니다.
+2. 발급 요청은 쿠폰과 시작 시각을 확인한 뒤, Lua 한 번으로 중복 확인·재고 차감·발급자 기록을 수행합니다.
+3. 통과한 요청을 `issuance.requested`에 JSON으로 전송합니다. Key는 `userId` 문자열입니다.
+4. Worker가 발급 내역 INSERT와 쿠폰 발급 수 증가를 **하나의 DB 트랜잭션**으로 처리합니다.
+5. Consumer 오류는 1초 간격으로 최대 3회 재시도하도록 설정되어 있으며, 복구 경로는 `issuance.requested.DLT`입니다. 두 토픽은 각각 3개 Partition·복제 수 1입니다.
 
-대표 요청이 락 유효 시간 안에 끝나는 경우 중복 조회를 줄이는 구조입니다. **항상 DB 조회가 한 번뿐임을 보장하지는 않습니다.** 조회가 3초보다 길면 다른 요청이 다시 락을 얻을 수 있습니다.
+Redis Lua의 원자성은 **Redis 내부 작업**에만 적용됩니다. Redis→Kafka→MySQL 전체를 한 번에 성공시키는 보장은 아닙니다.
 
 ### 핵심 코드
 
 | 책임 | 코드 |
 |---|---|
-| 정책 조회 분리 | [CouponIssuePolicyReader](src/main/kotlin/com/travio/coupon/application/CouponIssuePolicyReader.kt), [CouponIssuePolicy](src/main/kotlin/com/travio/coupon/application/CouponIssuePolicy.kt) |
-| HIT·LOAD·WAIT 처리 | [CouponCacheRepository](src/main/kotlin/com/travio/coupon/infrastructure/cache/CouponCacheRepository.kt) |
-| 캐시 조회와 락 획득 | [cache-single-flight.lua](src/main/resources/lua/cache-single-flight.lua) |
-| 내 락만 해제 | [release-lock.lua](src/main/resources/lua/release-lock.lua) |
-| 조회 횟수 관찰 | [CacheMetrics](src/main/kotlin/com/travio/coupon/application/CacheMetrics.kt) |
-
-### 설정
-
-| 항목 | 앱 단독 기본값 | Compose 기본값 |
-|---|---:|---:|
-| 정책 캐시 TTL | 10,000ms | 1,000ms |
-| DB 조회 인위적 지연 | 0ms | 100ms |
-| 락 만료 / 대기 | 3,000ms / 20ms×50회 | 동일 |
-
-Compose의 짧은 TTL과 인위적 지연은 차이를 관찰하기 위한 **실험 설정**입니다. 운영 DB 성능 수치가 아닙니다.
+| 생성·발급 요청 조합 | [CouponService](src/main/kotlin/com/travio/coupon/application/CouponService.kt) |
+| 재고·중복 판단 | [CouponIssuer](src/main/kotlin/com/travio/coupon/application/CouponIssuer.kt), [issue.lua](src/main/resources/lua/issue.lua) |
+| Kafka 요청 전송 | [IssuanceRequestProducer](src/main/kotlin/com/travio/coupon/infrastructure/messaging/IssuanceRequestProducer.kt) |
+| 중복 예외와 DB 트랜잭션 분리 | [IssuanceWriter](src/main/kotlin/com/travio/coupon/infrastructure/messaging/IssuanceWriter.kt), [IssuanceTransactionalWriter](src/main/kotlin/com/travio/coupon/infrastructure/messaging/IssuanceTransactionalWriter.kt) |
+| 중복 저장 최종 방어선 | [Issuance](src/main/kotlin/com/travio/coupon/domain/Issuance.kt)의 Unique 제약 |
 
 ## API
 
@@ -124,27 +111,6 @@ bash scripts/response/run.sh --once
 
 이 README 갱신에서는 코드·설정·스크립트·Git 이력을 대조했으며, 앱 기동·자동화 테스트·k6 부하 실험은 실행하지 않았습니다. 스크립트의 부하량과 p99 기준은 **실험 조건·목표이지 달성 결과가 아닙니다.** 성능 개선율과 장애 복구 보장을 제시하려면 실행 환경과 결과를 별도로 기록해야 합니다.
 
-### 캐시 실험
-
-```sh
-bash scripts/cache/run.sh --once policy
-bash scripts/cache/run.sh --once sellout
-curl http://localhost:8080/metrics/cache
-```
-
-| API / 지표 | 의미 |
-|---|---|
-| `GET /metrics/cache` | 현재 프로세스의 누적 카운터 조회 |
-| `POST /metrics/cache/reset` | 측정 카운터만 초기화; 캐시 삭제 아님 |
-| `couponDbReads` | 정책 loader 실행 횟수; DB 조회 실패 시도도 포함 |
-| `couponCacheHits` | 캐시 정책 반환 횟수 |
-| `soldOutRedisExists` | 매진 플래그 Redis 조회 횟수 |
-| `soldOutFastPathHits` | 로컬 캐시에서 매진으로 거절한 횟수 |
-
-카운터는 `AtomicLong` 기반으로 서버 재시작 시 초기화되며, 다중 인스턴스 합산 지표가 아닙니다. 매진 지표는 Caffeine 단계에서 실제 증가합니다.
-
-정책 실험은 시작 전 쿠폰에 500 요청/초를 30초간 보내 조회 경로를 관찰합니다. 매진 실험은 매진 후 4,000 요청/초를 30초간 보냅니다. k6가 요구하는 부하를 실제로 만들었는지도 함께 확인해야 합니다. 캐시 실험 러너는 k6 실패 코드를 무시하므로, 스크립트 종료만으로 성공을 판단하지 않습니다.
-
 ## 현재 한계와 후속 과제
 
 - Redis 선차감과 Kafka 전송·MySQL 저장은 하나의 트랜잭션이 아닙니다. Producer는 `send()` 완료를 기다리지 않고 Outbox도 없어, 전송 실패 시 재고와 DB 내역이 어긋날 수 있습니다.
@@ -152,8 +118,6 @@ curl http://localhost:8080/metrics/cache
 - 현재 발급자 Redis Set 키는 쿠폰 ID가 아닌 사용자 ID를 사용합니다. 따라서 서로 다른 쿠폰을 같은 사용자가 발급받는 경우에도 중복으로 판단할 수 있어 수정·검증이 필요합니다.
 - `X-User-Id`는 인증되지 않은 입력입니다. 쿠폰 사용 시 소유권 검사와 동시 사용 제어도 보강해야 합니다. 현재 코드를 운영용 보안·정합성 완성본으로 보지 않습니다.
 
-- 캐시를 채울 때까지 요청 스레드가 기다립니다. 대기 한도 소진·Redis 장애·3초를 넘는 loader의 처리는 별도 검증이 필요합니다.
-
 ## 다음 단계
 
-DB 조회가 줄어도 갱신 중 대기는 남습니다. 다음 [SWR 브랜치](https://github.com/Ryudirc/couponIssueSystem/tree/feature/swr)는 사용 가능한 기존 정책을 먼저 반환하고 갱신을 뒤로 보냅니다.
+현재는 같은 쿠폰의 반복 요청도 매번 DB를 조회합니다. 다음 [single-flight 브랜치](https://github.com/Ryudirc/couponIssueSystem/tree/feature/cache_singleFlight)는 정책을 캐시하고, 캐시 만료 순간 DB 조회가 한꺼번에 몰리는 문제를 다룹니다.
