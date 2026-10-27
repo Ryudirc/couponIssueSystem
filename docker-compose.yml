@@ -75,6 +75,7 @@ services:
       COUPON_CACHE_TTL_MS: ${COUPON_CACHE_TTL_MS:-1000}
       # issue 쿠폰 정보 조회의 stampede 차이를 보이기 위한 DB latency 시뮬레이션.
       COUPON_CACHE_SIMULATED_LOAD_LATENCY_MS: ${COUPON_CACHE_SIMULATED_LOAD_LATENCY_MS:-100}
+      COUPON_CACHE_FRESH_MS: ${COUPON_CACHE_FRESH_MS:-500}
     ports:
       - "8080:8080"
 
