@@ -25,7 +25,7 @@ class CouponReconcileRedisRepository(
         redisTemplate.opsForValue().get("coupon:$couponId:stock")?.toLongOrNull()
 
     fun userCount(couponId: Long) : Long =
-        redisTemplate.opsForValue().size("coupon:$couponId:users") ?: 0L
+        redisTemplate.opsForSet().size("coupon:$couponId:users") ?: 0L
 
     fun userIds(couponId: Long): Set<String> =
         redisTemplate.opsForSet().members("coupon:$couponId:users") ?: emptySet()
